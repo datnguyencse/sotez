@@ -24,7 +24,7 @@ export default class Key {
     _isLedger: boolean;
     _ledgerPath: string;
     _ledgerCurve: number;
-    ready: Promise<void>;
+    ready: Promise<boolean>;
     constructor({ key, passphrase, email, ledgerPath, ledgerCurve, }?: {
         key?: string;
         passphrase?: string;
@@ -61,7 +61,7 @@ export default class Key {
         key?: string | undefined;
         passphrase?: string | undefined;
         email?: string | undefined;
-    }, ready: any) => Promise<void>;
+    }) => Promise<boolean>;
     /**
      * @memberof Key
      * @description Sign a raw sequence of bytes

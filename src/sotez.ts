@@ -1,6 +1,6 @@
-import XMLHttpRequest from 'xhr2';
 import AbstractTezModule from './tez-core';
 import Key from './key';
+import Contract from './contract';
 import forge from './forge';
 import utility from './utility';
 import { watermark, protocols } from './constants';
@@ -15,12 +15,13 @@ interface KeyInterface {
   isLedger: boolean;
   ledgerPath: string;
   ledgerCurve: number;
-  ready: Promise<void>;
+  ready: Promise<boolean>;
   curve: string;
-  initialize: (
-    keyParams: { key?: string; passphrase?: string; email?: string },
-    resolve: any,
-  ) => Promise<void>;
+  initialize: (keyParams: {
+    key?: string;
+    passphrase?: string;
+    email?: string;
+  }) => Promise<boolean>;
   publicKey: () => string;
   secretKey: () => string;
   publicKeyHash: () => string;
@@ -259,7 +260,6 @@ export default class Sotez extends AbstractTezModule {
   _localForge: boolean;
   _validateLocalForge: boolean;
   _defaultFee: number;
-  _debugMode: boolean;
   _counters: { [key: string]: number };
   key: KeyInterface;
 
@@ -268,11 +268,10 @@ export default class Sotez extends AbstractTezModule {
     chain = 'main',
     options: ModuleOptions = {},
   ) {
-    super(provider, chain);
+    super(provider, chain, options.debugMode);
     this._defaultFee = options.defaultFee || 1420;
     this._localForge = options.localForge !== false;
     this._validateLocalForge = options.validateLocalForge || false;
-    this._debugMode = options.debugMode || false;
     this._counters = {};
   }
 
@@ -306,14 +305,6 @@ export default class Sotez extends AbstractTezModule {
 
   set counters(counters: { [key: string]: number }) {
     this._counters = counters;
-  }
-
-  get debugMode(): boolean {
-    return this._debugMode;
-  }
-
-  set debugMode(t: boolean) {
-    this._debugMode = t;
   }
 
   setProvider(provider: string, chain: string = this.chain): void {
@@ -352,71 +343,6 @@ export default class Sotez extends AbstractTezModule {
   ): Promise<void> => {
     this.key = new Key({ ledgerPath: path, ledgerCurve: curve });
     await this.key.ready;
-  };
-
-  /**
-   * @description Queries a node given a path and payload
-   * @param {string} path The RPC path to query
-   * @param {string} payload The payload of the query
-   * @param {string} method The request method. Either 'GET' or 'POST'
-   * @returns {Promise} The response of the query
-   * @example
-   * sotez.query(`/chains/main/blocks/head`)
-   *  .then(head => console.log(head));
-   */
-  query = (path: string, payload?: any, method?: string): Promise<any> => {
-    if (typeof payload === 'undefined') {
-      if (typeof method === 'undefined') {
-        method = 'GET';
-      } else {
-        payload = {};
-      }
-    } else if (typeof method === 'undefined') {
-      method = 'POST';
-    }
-    return new Promise((resolve, reject) => {
-      try {
-        const http = new XMLHttpRequest();
-        http.open(method, this.provider + path, true);
-        http.onload = () => {
-          if (this._debugMode) {
-            console.log('Node call:', path, payload);
-          }
-          if (http.status === 200) {
-            if (http.responseText) {
-              let response = JSON.parse(http.responseText);
-              if (this._debugMode) {
-                console.log('Node response:', path, response);
-              }
-              if (response && typeof response.error !== 'undefined') {
-                reject(response.error);
-              } else {
-                if (response && typeof response.ok !== 'undefined')
-                  response = response.ok;
-                resolve(response);
-              }
-            } else {
-              reject('Empty response returned'); // eslint-disable-line
-            }
-          } else if (http.responseText) {
-            reject(http.responseText);
-          } else {
-            reject(http.statusText);
-          }
-        };
-        http.onerror = () => {
-          reject(http.statusText);
-        };
-        if (method === 'POST') {
-          http.setRequestHeader('Content-Type', 'application/json');
-          http.send(JSON.stringify(payload));
-        } else {
-          http.send();
-        }
-      } catch (e) {
-        reject(e);
-      }
-    });
   };
 
   /**
@@ -720,15 +646,6 @@ export default class Sotez extends AbstractTezModule {
   };
 
   /**
-   * @description Get the current head block hash of the chain
-   * @param {string} path The path to query
-   * @param {Object} payload The payload of the request
-   * @returns {Promise} The response of the rpc call
-   */
-  call = (path: string, payload?: OperationObject): Promise<any> =>
-    this.query(path, payload);
-
-  /**
    * @description Prepares an operation
    * @param {Object} paramObject The parameters for the operation
    * @param {Object | Array} paramObject.operation The operation to include in the transaction
@@ -783,7 +700,7 @@ export default class Sotez extends AbstractTezModule {
         head = header;
 
         if (requiresReveal) {
-          const managerKey = this._getManagerKey(manager, metadata.protocol);
+          const managerKey = this.getManagerKey(manager, metadata.protocol);
           if (!managerKey) {
             const reveal: Operation = {
               kind: 'reveal',
@@ -1149,24 +1066,9 @@ export default class Sotez extends AbstractTezModule {
     gasLimit = 10600,
     storageLimit = 257,
   }: ContractParams): Promise<any> => {
-    let _code;
-    let _init;
-
-    if (typeof code === 'string') {
-      _code = utility.ml2mic(code);
-    } else {
-      _code = code;
-    }
-
-    if (typeof init === 'string') {
-      _init = utility.sexp2mic(init);
-    } else {
-      _init = init;
-    }
-
     const script = {
-      code: _code,
-      storage: _init,
+      code: typeof code === 'string' ? utility.ml2mic(code) : code,
+      storage: typeof init === 'string' ? utility.sexp2mic(init) : init,
     };
 
     const publicKeyHash = this.key.publicKeyHash();
@@ -1258,23 +1160,14 @@ export default class Sotez extends AbstractTezModule {
    * @param {number} gas The the gas limit
    * @returns {Promise} Typecheck result
    */
-  typecheckCode = (code: string | Micheline, gas = 10000): Promise<any> => {
-    let _code;
-
-    if (typeof code === 'string') {
-      _code = utility.ml2mic(code);
-    } else {
-      _code = code;
-    }
-
-    return this.query(
+  typecheckCode = (code: string | Micheline, gas = 10000): Promise<any> =>
+    this.query(
       `/chains/${this.chain}/blocks/head/helpers/scripts/typecheck_code`,
       {
-        program: _code,
+        program: typeof code === 'string' ? utility.ml2mic(code) : code,
         gas,
       },
     );
-  };
 
   /**
    * @description Serializes a piece of data to a binary representation
@@ -1286,24 +1179,9 @@ export default class Sotez extends AbstractTezModule {
     data: string | Micheline,
     type: string | Micheline,
   ): Promise<any> => {
-    let _data;
-    let _type;
-
-    if (typeof data === 'string') {
-      _data = utility.sexp2mic(data);
-    } else {
-      _data = data;
-    }
-
-    if (typeof type === 'string') {
-      _type = utility.sexp2mic(type);
-    } else {
-      _type = type;
-    }
-
     const check = {
-      data: _data,
-      type: _type,
+      data: typeof data === 'string' ? utility.sexp2mic(data) : data,
+      type: typeof type === 'string' ? utility.sexp2mic(type) : type,
       gas: '4000000',
     };
 
@@ -1323,24 +1201,9 @@ export default class Sotez extends AbstractTezModule {
     data: string | Micheline,
     type: string | Micheline,
   ): Promise<any> => {
-    let _data;
-    let _type;
-
-    if (typeof data === 'string') {
-      _data = utility.sexp2mic(data);
-    } else {
-      _data = data;
-    }
-
-    if (typeof type === 'string') {
-      _type = utility.sexp2mic(type);
-    } else {
-      _type = type;
-    }
-
     const check = {
-      data: _data,
-      type: _type,
+      data: typeof data === 'string' ? utility.sexp2mic(data) : data,
+      type: typeof type === 'string' ? utility.sexp2mic(type) : type,
       gas: '4000000',
     };
 
@@ -1362,41 +1225,19 @@ export default class Sotez extends AbstractTezModule {
   runCode = (
     code: string | Micheline,
     amount: number,
-    input: string,
-    storage: string,
+    input: string | Micheline,
+    storage: string | Micheline,
     trace = false,
   ): Promise<any> => {
     const ep = trace ? 'trace_code' : 'run_code';
-
-    let _code;
-    let _input;
-    let _storage;
-
-    if (typeof code === 'string') {
-      _code = utility.sexp2mic(code);
-    } else {
-      _code = code;
-    }
-
-    if (typeof input === 'string') {
-      _input = utility.sexp2mic(input);
-    } else {
-      _input = input;
-    }
-
-    if (typeof storage === 'string') {
-      _storage = utility.sexp2mic(storage);
-    } else {
-      _storage = storage;
-    }
-
     return this.query(
       `/chains/${this.chain}/blocks/head/helpers/scripts/${ep}`,
       {
-        script: _code,
         amount: `${utility.mutez(amount)}`,
-        input: _input,
-        storage: _storage,
+        script: typeof code === 'string' ? utility.sexp2mic(code) : code,
+        input: typeof input === 'string' ? utility.sexp2mic(input) : input,
+        storage:
+          typeof storage === 'string' ? utility.sexp2mic(storage) : storage,
       },
     );
   };
@@ -1407,7 +1248,7 @@ export default class Sotez extends AbstractTezModule {
    * @param {string} protocol The protocol of the current block
    * @returns {string} If manager exists, returns the manager key
    */
-  _getManagerKey = (manager: any, protocol: string): string | null => {
+  getManagerKey = (manager: any, protocol: string): string | null => {
     if (!manager) {
       return null;
     }
@@ -1426,7 +1267,13 @@ export default class Sotez extends AbstractTezModule {
     return protocolMap[protocol];
   };
 
-  _conformOperation = (
+  /**
+   * Conforms the operation to a specific protocol
+   * @param {Object} constructedOp The operation object
+   * @param {string} nextProtocol The next protocol of the current block
+   * @returns {string} The protocol specific operation
+   */
+  private _conformOperation = (
     constructedOp: ConstructedOperation,
     nextProtocol: string,
   ): ConstructedOperation => {
@@ -1450,5 +1297,33 @@ export default class Sotez extends AbstractTezModule {
     };
 
     return protocolMap[nextProtocol](constructedOp);
+  };
+
+  /**
+   * Looks up a contract and returns an initialized contract
+   * @param {Object} address The contract address
+   * @returns {Promise} An initialized contract class
+   * @example
+   * // Load contract
+   * const contract = await sotez.loadContract('KT1MKm4ynxPSzRjw26jPSJbaMFTqTc4dVPdK');
+   * // List defined contract methods
+   * const { methods } = contract;
+   * // Retrieve contract storage
+   * const storage = contract.storage();
+   * // Get big map keys
+   * await storage.ledger.get('tz1P1n8LvweoarK3DTPSnAHtiGVRujhvR2vk');
+   * // Determine method schema
+   * await contract.methods.transfer('tz1P1n8LvweoarK3DTPSnAHtiGVRujhvR2vk', 100).schema();
+   * // Send contract operation
+   * await contract.methods.transfer('tz1P1n8LvweoarK3DTPSnAHtiGVRujhvR2vk', 100).send({
+   *   fee: '100000',
+   *   gasLimit: '800000',
+   *   storageLimit: '60000',
+   * });
+   */
+  loadContract = async (address: string): Promise<Contract> => {
+    const contract = new Contract(this, address);
+    await contract.loaded;
+    return contract;
   };
 }

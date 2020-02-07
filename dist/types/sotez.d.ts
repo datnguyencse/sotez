@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import AbstractTezModule from './tez-core';
+import Contract from './contract';
 interface KeyInterface {
     _publicKey: Buffer;
     _secretKey?: Buffer;
@@ -10,13 +11,13 @@ interface KeyInterface {
     isLedger: boolean;
     ledgerPath: string;
     ledgerCurve: number;
-    ready: Promise<void>;
+    ready: Promise<boolean>;
     curve: string;
     initialize: (keyParams: {
         key?: string;
         passphrase?: string;
         email?: string;
-    }, resolve: any) => Promise<void>;
+    }) => Promise<boolean>;
     publicKey: () => string;
     secretKey: () => string;
     publicKeyHash: () => string;
@@ -255,7 +256,6 @@ export default class Sotez extends AbstractTezModule {
     _localForge: boolean;
     _validateLocalForge: boolean;
     _defaultFee: number;
-    _debugMode: boolean;
     _counters: {
         [key: string]: number;
     };
@@ -273,8 +273,6 @@ export default class Sotez extends AbstractTezModule {
     set counters(counters: {
         [key: string]: number;
     });
-    get debugMode(): boolean;
-    set debugMode(t: boolean);
     setProvider(provider: string, chain?: string): void;
     /**
      * @description Import a secret key
@@ -293,17 +291,6 @@ export default class Sotez extends AbstractTezModule {
      * await sotez.importLedger();
      */
     importLedger: (path?: string, curve?: number) => Promise<void>;
-    /**
-     * @description Queries a node given a path and payload
-     * @param {string} path The RPC path to query
-     * @param {string} payload The payload of the query
-     * @param {string} method The request method. Either 'GET' or 'POST'
-     * @returns {Promise} The response of the query
-     * @example
-     * sotez.query(`/chains/main/blocks/head`)
-     *  .then(head => console.log(head));
-     */
-    query: (path: string, payload?: any, method?: string | undefined) => Promise<any>;
     /**
      * @description Originate a new account
      * @param {Object} paramObject The parameters for the origination
@@ -485,13 +472,6 @@ export default class Sotez extends AbstractTezModule {
      *  .then((hash) => console.log(hash));
      */
     awaitOperation: (hash: string, interval?: number, timeout?: number) => Promise<string>;
-    /**
-     * @description Get the current head block hash of the chain
-     * @param {string} path The path to query
-     * @param {Object} payload The payload of the request
-     * @returns {Promise} The response of the rpc call
-     */
-    call: (path: string, payload?: OperationObject | undefined) => Promise<any>;
     /**
      * @description Prepares an operation
      * @param {Object} paramObject The parameters for the operation
@@ -926,14 +906,129 @@ export default class Sotez extends AbstractTezModule {
         key_hash: string;
     } | {
         signature: string;
-    } | MichelineArray, amount: number, input: string, storage: string, trace?: boolean) => Promise<any>;
+    } | MichelineArray, amount: number, input: string | {
+        entrypoint: string;
+        value: MichelineArray | {
+            prim: string;
+            args?: MichelineArray | undefined;
+            annots?: string[] | undefined;
+        } | {
+            bytes: string;
+        } | {
+            int: string;
+        } | {
+            string: string;
+        } | {
+            address: string;
+        } | {
+            contract: string;
+        } | {
+            key: string;
+        } | {
+            key_hash: string;
+        } | {
+            signature: string;
+        };
+    } | {
+        prim: string;
+        args?: MichelineArray | undefined;
+        annots?: string[] | undefined;
+    } | {
+        bytes: string;
+    } | {
+        int: string;
+    } | {
+        string: string;
+    } | {
+        address: string;
+    } | {
+        contract: string;
+    } | {
+        key: string;
+    } | {
+        key_hash: string;
+    } | {
+        signature: string;
+    } | MichelineArray, storage: string | {
+        entrypoint: string;
+        value: MichelineArray | {
+            prim: string;
+            args?: MichelineArray | undefined;
+            annots?: string[] | undefined;
+        } | {
+            bytes: string;
+        } | {
+            int: string;
+        } | {
+            string: string;
+        } | {
+            address: string;
+        } | {
+            contract: string;
+        } | {
+            key: string;
+        } | {
+            key_hash: string;
+        } | {
+            signature: string;
+        };
+    } | {
+        prim: string;
+        args?: MichelineArray | undefined;
+        annots?: string[] | undefined;
+    } | {
+        bytes: string;
+    } | {
+        int: string;
+    } | {
+        string: string;
+    } | {
+        address: string;
+    } | {
+        contract: string;
+    } | {
+        key: string;
+    } | {
+        key_hash: string;
+    } | {
+        signature: string;
+    } | MichelineArray, trace?: boolean) => Promise<any>;
     /**
      * Get the mananger key from the protocol dependent query
      * @param {Object|string} manager The manager key query response
      * @param {string} protocol The protocol of the current block
      * @returns {string} If manager exists, returns the manager key
      */
-    _getManagerKey: (manager: any, protocol: string) => string | null;
-    _conformOperation: (constructedOp: ConstructedOperation, nextProtocol: string) => ConstructedOperation;
+    getManagerKey: (manager: any, protocol: string) => string | null;
+    /**
+     * Conforms the operation to a specific protocol
+     * @param {Object} constructedOp The operation object
+     * @param {string} nextProtocol The next protocol of the current block
+     * @returns {string} The protocol specific operation
+     */
+    private _conformOperation;
+    /**
+     * Looks up a contract and returns an initialized contract
+     * @param {Object} address The contract address
+     * @returns {Promise} An initialized contract class
+     * @example
+     * // Load contract
+     * const contract = await sotez.loadContract('KT1MKm4ynxPSzRjw26jPSJbaMFTqTc4dVPdK');
+     * // List defined contract methods
+     * const { methods } = contract;
+     * // Retrieve contract storage
+     * const storage = contract.storage();
+     * // Get big map keys
+     * await storage.ledger.get('tz1P1n8LvweoarK3DTPSnAHtiGVRujhvR2vk');
+     * // Determine method schema
+     * await contract.methods.transfer('tz1P1n8LvweoarK3DTPSnAHtiGVRujhvR2vk', 100).schema();
+     * // Send contract operation
+     * await contract.methods.transfer('tz1P1n8LvweoarK3DTPSnAHtiGVRujhvR2vk', 100).send({
+     *   fee: '100000',
+     *   gasLimit: '800000',
+     *   storageLimit: '60000',
+     * });
+     */
+    loadContract: (address: string) => Promise<Contract>;
 }
 export {};

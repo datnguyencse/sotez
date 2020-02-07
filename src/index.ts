@@ -1,6 +1,7 @@
 import Sotez from './sotez';
 
 export { default as Key } from './key';
+export { default as Contract } from './contract';
 export { default as crypto } from './crypto';
 export { default as forge } from './forge';
 export { default as utility } from './utility';

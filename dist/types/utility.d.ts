@@ -33,6 +33,7 @@ declare const _default: {
     hex2buf: (hex: string) => Uint8Array;
     hexNonce: (length: number) => string;
     mergebuf: (b1: Uint8Array, b2: Uint8Array) => Uint8Array;
+    encodeExpr: (value: string) => string;
     sexp2mic: (mi: string) => Micheline;
     mic2arr: (s: any) => any;
     ml2mic: (mi: string) => Micheline;

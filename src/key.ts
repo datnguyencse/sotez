@@ -31,7 +31,7 @@ export default class Key {
   _isLedger: boolean;
   _ledgerPath: string;
   _ledgerCurve: number;
-  ready: Promise<void>;
+  ready: Promise<boolean>;
 
   constructor({
     key,
@@ -49,10 +49,7 @@ export default class Key {
     this._isLedger = !key;
     this._ledgerPath = ledgerPath;
     this._ledgerCurve = ledgerCurve;
-
-    this.ready = new Promise(resolve => {
-      this.initialize({ key, passphrase, email }, resolve);
-    });
+    this.ready = this.initialize({ key, passphrase, email });
   }
 
   get curve(): string {
@@ -129,14 +126,15 @@ export default class Key {
     );
   };
 
-  initialize = async (
-    {
-      key,
-      passphrase,
-      email,
-    }: { key?: string; passphrase?: string; email?: string },
-    ready: any,
-  ): Promise<void> => {
+  initialize = async ({
+    key,
+    passphrase,
+    email,
+  }: {
+    key?: string;
+    passphrase?: string;
+    email?: string;
+  }): Promise<boolean> => {
     await sodium.ready;
 
     if (this._isLedger || !key) {
@@ -171,8 +169,7 @@ export default class Key {
       this._curve = 'ed';
       this._isSecret = true;
 
-      ready();
-      return;
+      return true;
     }
 
     this._curve = key.substr(0, 2);
@@ -287,7 +284,7 @@ export default class Key {
       }
     }
 
-    ready();
+    return true;
   };
 
   /**
