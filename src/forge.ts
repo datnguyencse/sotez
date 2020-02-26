@@ -244,21 +244,21 @@ const address = (addressArg: string, protocol = ''): string => {
  */
 const zarith = (n: string): string => {
   const fn: Array<string> = [];
-  let nn = parseInt(n, 10);
-  if (Number.isNaN(nn)) {
+  let nn = new BigNumber(n, 10);
+  if (nn.isNaN()) {
     throw new TypeError(`Error forging zarith ${n}`);
   }
   while (true) {
     // eslint-disable-line
-    if (nn < 128) {
-      if (nn < 16) fn.push('0');
+    if (nn.lt(128)) {
+      if (nn.lt(16)) fn.push('0');
       fn.push(nn.toString(16));
       break;
     } else {
-      let b = nn % 128;
-      nn -= b;
-      nn /= 128;
-      b += 128;
+      let b = nn.mod(128);
+      nn = nn.minus(b);
+      nn = nn.dividedBy(128);
+      b = b.plus(128);
       fn.push(b.toString(16));
     }
   }
