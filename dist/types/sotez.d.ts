@@ -215,6 +215,7 @@ interface OperationParams {
     source?: string;
     skipPrevalidation?: boolean;
     skipSignature?: boolean;
+    skipCounter?: boolean;
 }
 interface ContractParams {
     balance: number;
@@ -489,7 +490,7 @@ export default class Sotez extends AbstractTezModule {
      *   }
      * }).then(({ opbytes, opOb, counter }) => console.log(opbytes, opOb, counter));
      */
-    prepareOperation: ({ operation, source, }: OperationParams) => Promise<ForgedBytes>;
+    prepareOperation: ({ operation, source, skipCounter, }: OperationParams) => Promise<ForgedBytes>;
     /**
      * @description Simulate an operation
      * @param {Object} paramObject The parameters for the operation
