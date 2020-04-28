@@ -2,7 +2,6 @@ import * as sodium from 'libsodium-wrappers';
 import * as pbkdf2 from 'pbkdf2';
 import * as elliptic from 'elliptic';
 import toBuffer from 'typedarray-to-buffer';
-import ledger from 'ledger'; // eslint-disable-line
 import utility from './utility';
 import { prefix } from './constants';
 
@@ -10,17 +9,13 @@ import { prefix } from './constants';
  * Creates a key object from a base58 encoded key.
  * @class Key
  * @param {Object} KeyConstructor
- * @param {string} [KeyConstructor.key] A public or secret key in base58 encoding, or a 15 word bip39 english mnemonic string. Not
- *   providing a key will import a ledger public key.
+ * @param {string} [KeyConstructor.key] A public or secret key in base58 encoding, or a 15 word bip39 english mnemonic string.
  * @param {string} [KeyConstructor.passphrase] The passphrase used if the key provided is an encrypted private key or a fundraiser key
- * @param {string} [KeyConstructor.email] Email used if a fundraiser key is passed
- * @param {string} [KeyConstructor.ledgerPath="44'/1729'/0'/0'"] Ledger derivation path
- * @param {number} [KeyConstructor.ledgerCurve=0x00] Ledger curve
+ * @param {string} [KeyConstructor.email] Email used if a fundraiser key is
  * @example
  * const key = new Key({ key: 'edskRv6ZnkLQMVustbYHFPNsABu1Js6pEEWyMUFJQTqEZjVCU2WHh8ckcc7YA4uBzPiJjZCsv3pC1NDdV99AnyLzPjSip4uC3y' });
  * await key.ready;
  *
- * const key = new Key({ ledgerPath: "44'/1729'/0'/1'" });
  * await key.ready;
  */
 export default class Key {
@@ -28,28 +23,17 @@ export default class Key {
   _publicKey: Buffer;
   _secretKey?: Buffer;
   _isSecret: boolean;
-  _isLedger: boolean;
-  _ledgerPath: string;
-  _ledgerCurve: number;
   ready: Promise<void>;
 
   constructor({
     key,
     passphrase,
     email,
-    ledgerPath = "44'/1729'/0'/0'",
-    ledgerCurve = 0x00,
   }: {
     key?: string;
     passphrase?: string;
     email?: string;
-    ledgerPath?: string;
-    ledgerCurve?: number;
   } = {}) {
-    this._isLedger = !key;
-    this._ledgerPath = ledgerPath;
-    this._ledgerCurve = ledgerCurve;
-
     this.ready = new Promise(resolve => {
       this.initialize({ key, passphrase, email }, resolve);
     });
@@ -57,30 +41,6 @@ export default class Key {
 
   get curve(): string {
     return this._curve;
-  }
-
-  get isLedger(): boolean {
-    return this._isLedger;
-  }
-
-  set isLedger(value: boolean) {
-    this._isLedger = value;
-  }
-
-  get ledgerPath(): string {
-    return this._ledgerPath;
-  }
-
-  set ledgerPath(value: string) {
-    this._ledgerPath = value;
-  }
-
-  get ledgerCurve(): number {
-    return this._ledgerCurve;
-  }
-
-  set ledgerCurve(value: number) {
-    this._ledgerCurve = value;
   }
 
   /**
@@ -139,12 +99,8 @@ export default class Key {
   ): Promise<void> => {
     await sodium.ready;
 
-    if (this._isLedger || !key) {
-      ({ publicKey: key } = await ledger.getAddress({
-        path: this._ledgerPath,
-        displayConfirm: true,
-        curve: this._ledgerCurve,
-      }));
+    if (!key) {
+      throw new Error('Invalid key provided.');
     }
 
     if (email) {
@@ -306,27 +262,6 @@ export default class Key {
     prefixSig: string;
     sbytes: string;
   }> => {
-    if (this._isLedger) {
-      const signature = await ledger.signOperation({
-        path: this._ledgerPath,
-        rawTxHex: bytes,
-        curve: this._ledgerCurve,
-        watermark,
-      });
-      const signatureBuffer = utility.hex2buf(signature);
-      const sbytes = bytes + signature;
-
-      return {
-        bytes,
-        sig: utility.b58cencode(signatureBuffer, prefix.sig),
-        prefixSig: utility.b58cencode(
-          signatureBuffer,
-          prefix[`${this._curve}sig`],
-        ),
-        sbytes,
-      };
-    }
-
     let bb = utility.hex2buf(bytes);
     if (typeof watermark !== 'undefined') {
       bb = utility.mergebuf(watermark, bb);

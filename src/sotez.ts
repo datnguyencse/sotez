@@ -8,13 +8,7 @@ import { watermark, protocols } from './constants';
 interface KeyInterface {
   _publicKey: Buffer;
   _secretKey?: Buffer;
-  _isLedger: boolean;
-  _ledgerPath: string;
-  _ledgerCurve: number;
   _isSecret: boolean;
-  isLedger: boolean;
-  ledgerPath: string;
-  ledgerCurve: number;
   ready: Promise<void>;
   curve: string;
   initialize: (
@@ -337,21 +331,6 @@ export default class Sotez extends AbstractTezModule {
     email?: string,
   ): Promise<void> => {
     this.key = new Key({ key, passphrase, email });
-    await this.key.ready;
-  };
-
-  /**
-   * @description Import a ledger public key
-   * @param {string} [path="44'/1729'/0'/0'"] The ledger path
-   * @param {number} [curve=0x00] The curve parameter
-   * @example
-   * await sotez.importLedger();
-   */
-  importLedger = async (
-    path = "44'/1729'/0'/0'",
-    curve = 0x00,
-  ): Promise<void> => {
-    this.key = new Key({ ledgerPath: path, ledgerCurve: curve });
     await this.key.ready;
   };
 
